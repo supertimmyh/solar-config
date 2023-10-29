@@ -1,6 +1,14 @@
+import GeoTIFF from 'geotiff';
+
+/**
+ * @typedef {Object} DataLayers
+ * @property {string} rgbUrl - The URL of the RGB data layer.
+ * @property {string} maskUrl - The URL of the mask data layer.
+ */
+
 /**
  * @param {string} apiKey - The API key for authentication.
- * @param {import("@nora-soderlund/google-maps-solar-api").DataLayers} dataLayers - Data layers.
+ * @param {DataLayers} dataLayers - The data layers.
  * @returns {Promise<HTMLCanvasElement>} The RGB canvas.
  */
 export async function getDataLayerRgbCanvas(apiKey, dataLayers) {
@@ -31,7 +39,7 @@ export async function getDataLayerRgbCanvas(apiKey, dataLayers) {
 
 /**
  * @param {string} apiKey - The API key for authentication.
- * @param {import("@nora-soderlund/google-maps-solar-api").DataLayers} dataLayers - Data layers.
+ * @param {DataLayers} dataLayers - The data layers.
  * @returns {Promise<HTMLCanvasElement>} The mask canvas.
  */
 export async function getDataLayerMaskCanvas(apiKey, dataLayers) {
@@ -52,93 +60,25 @@ export async function getDataLayerMaskCanvas(apiKey, dataLayers) {
     for (let column = 0; column < tiffData.width; column++) {
       const index = row * tiffData.width + column;
 
-      if (tiffData[0][index]) context.fillRect(column, row, 1, 1);
+      context.fillStyle = `rgb(${tiffData[0][index]}, ${tiffData[0][index]}, ${tiffData[0][index]})`;
+      context.fillRect(column, row, 1, 1);
     }
   }
-
-  console.log({ mask: canvas });
 
   return canvas;
 }
 
 /**
  * @param {string} apiKey - The API key for authentication.
- * @param {import("@nora-soderlund/google-maps-solar-api").DataLayers} dataLayers - Data layers.
- * @param {number} scale - The scale factor.
- * @returns {Promise<HTMLCanvasElement>} The flux canvas.
+ * @param {string} url - The URL of the TIFF image.
+ * @returns {Promise<ArrayBuffer>} The TIFF image buffer.
  */
-export async function getDataLayerFluxCanvas(apiKey, dataLayers, scale) {
-  const tiffImageBuffer = await getTiff(apiKey, dataLayers.annualFluxUrl);
+async function getTiff(apiKey, url) {
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
 
-  const tiff = await GeoTIFF.fromArrayBuffer(tiffImageBuffer);
-  const tiffImage = await tiff.getImage();
-  const tiffData = await tiffImage.readRasters();
-
-  console.log(tiffData);
-
-  const canvas = document.createElement("canvas");
-
-  canvas.width = tiffData.width * scale;
-  canvas.height = tiffData.height * scale;
-
-  const context = canvas.getContext("2d");
-
-  const maximumKwhPerKwPerYear = tiffData[0].reduce(
-    (unit, currentUnit) => (unit > currentUnit ? unit : currentUnit),
-    0
-  );
-
-  for (let row = 0; row < tiffData.height; row += Math.round(1 / scale)) {
-    for (let column = 0; column < tiffData.width; column += Math.round(1 / scale)) {
-      const index = row * tiffData.width + column;
-
-      const value = tiffData[0][index];
-
-      if (value === -9999) continue;
-
-      context.fillStyle = `hsl(50 100% ${((value / maximumKwhPerKwPerYear) * 100)}%)`;
-
-      context.fillRect(column * scale, row * scale, 1, 1);
-    }
-  }
-
-  console.log({ flux: canvas });
-
-  return canvas;
-}
-
-/**
- * @param {string} apiKey - The API key for authentication.
- * @param {import("@nora-soderlund/google-maps-solar-api").DataLayers} dataLayers - Data layers.
- * @returns {Promise<HTMLCanvasElement>} The combined canvas.
- */
-export default async function getDataLayersCanvas(apiKey, dataLayers) {
-  const canvas = document.createElement("canvas");
-
-  const expectedSize = 2000;
-  const scale = 1;
-  const size = expectedSize * scale;
-
-  canvas.width = size;
-  canvas.height = size;
-
-  const context = canvas.getContext("2d");
-
-  const canvases = await Promise.all([
-    //getDataLayerFluxCanvas(apiKey, dataLayers, 1),
-    //getDataLayerMaskCanvas(apiKey, dataLayers),
-    getDataLayerRgbCanvas(apiKey, dataLayers)
-  ]);
-
-  //context.drawImage(canvases[0], 0, 0, canvases[0].width, canvases[0].height, 0, 0, size, size);
-
-  //context.globalCompositeOperation = "destination-in";
-  //context.drawImage(canvases[1], 0, 0, canvases[1].width, canvases[1].height, 0, 0, size, size);
-
-  console.log({ result: canvas });
-
-  //context.globalCompositeOperation = "destination-over";
-  context.drawImage(canvases[0], 0, 0, canvases[0].width, canvases[0].height, 0, 0, size, size);
-
-  return canvas;
+  return response.arrayBuffer();
 }
